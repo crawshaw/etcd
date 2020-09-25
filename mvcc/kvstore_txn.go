@@ -130,20 +130,15 @@ func (tr *storeTxnRead) rangeKeys(key, end []byte, curRev int64, ro RangeOptions
 		tr.trace.Step("count revisions from in-memory index tree")
 		return &RangeResult{KVs: nil, Count: total, Rev: curRev}, nil
 	}
-	revpairs := tr.s.kvindex.Revisions(key, end, rev)
+	revpairs := tr.s.kvindex.Revisions(key, end, rev, int(ro.Limit))
 	tr.trace.Step("range keys from in-memory index tree")
 	if len(revpairs) == 0 {
 		return &RangeResult{KVs: nil, Count: 0, Rev: curRev}, nil
 	}
 
-	limit := int(ro.Limit)
-	if limit <= 0 || limit > len(revpairs) {
-		limit = len(revpairs)
-	}
-
-	kvs := make([]mvccpb.KeyValue, limit)
+	kvs := make([]mvccpb.KeyValue, len(revpairs))
 	revBytes := newRevBytes()
-	for i, revpair := range revpairs[:len(kvs)] {
+	for i, revpair := range revpairs {
 		revToBytes(revpair, revBytes)
 		_, vs := tr.tx.UnsafeRange(keyBucketName, revBytes, nil, 0)
 		if len(vs) != 1 {

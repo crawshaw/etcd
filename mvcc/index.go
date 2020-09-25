@@ -25,7 +25,7 @@ import (
 type index interface {
 	Get(key []byte, atRev int64) (rev, created revision, ver int64, err error)
 	Range(key, end []byte, atRev int64) ([][]byte, []revision)
-	Revisions(key, end []byte, atRev int64) []revision
+	Revisions(key, end []byte, atRev int64, limit int) []revision
 	CountRevisions(key, end []byte, atRev int64) int
 	Put(key []byte, rev revision)
 	Tombstone(key []byte, rev revision) error
@@ -89,13 +89,20 @@ func (ti *treeIndex) keyIndex(keyi *keyIndex) *keyIndex {
 	return nil
 }
 
-func (ti *treeIndex) visit(key, end []byte, f func(ki *keyIndex)) {
+func (ti *treeIndex) visit(key, end []byte, limit int, f func(ki *keyIndex)) {
 	keyi, endi := &keyIndex{key: key}, &keyIndex{key: end}
 
 	ti.RLock()
 	defer ti.RUnlock()
 
+	if limit == 0 {
+		limit = -1 // no limit
+	}
 	ti.tree.AscendGreaterOrEqual(keyi, func(item btree.Item) bool {
+		if limit == 0 {
+			return false
+		}
+		limit--
 		if len(endi.key) > 0 && !item.Less(endi) {
 			return false
 		}
@@ -104,7 +111,7 @@ func (ti *treeIndex) visit(key, end []byte, f func(ki *keyIndex)) {
 	})
 }
 
-func (ti *treeIndex) Revisions(key, end []byte, atRev int64) (revs []revision) {
+func (ti *treeIndex) Revisions(key, end []byte, atRev int64, limit int) (revs []revision) {
 	if end == nil {
 		rev, _, _, err := ti.Get(key, atRev)
 		if err != nil {
@@ -112,7 +119,7 @@ func (ti *treeIndex) Revisions(key, end []byte, atRev int64) (revs []revision) {
 		}
 		return []revision{rev}
 	}
-	ti.visit(key, end, func(ki *keyIndex) {
+	ti.visit(key, end, limit, func(ki *keyIndex) {
 		if rev, _, _, err := ki.get(ti.lg, atRev); err == nil {
 			revs = append(revs, rev)
 		}
@@ -129,7 +136,7 @@ func (ti *treeIndex) CountRevisions(key, end []byte, atRev int64) int {
 		return 1
 	}
 	total := 0
-	ti.visit(key, end, func(ki *keyIndex) {
+	ti.visit(key, end, -1, func(ki *keyIndex) {
 		if _, _, _, err := ki.get(ti.lg, atRev); err == nil {
 			total++
 		}
@@ -145,7 +152,7 @@ func (ti *treeIndex) Range(key, end []byte, atRev int64) (keys [][]byte, revs []
 		}
 		return [][]byte{key}, []revision{rev}
 	}
-	ti.visit(key, end, func(ki *keyIndex) {
+	ti.visit(key, end, -1, func(ki *keyIndex) {
 		if rev, _, _, err := ki.get(ti.lg, atRev); err == nil {
 			revs = append(revs, rev)
 			keys = append(keys, ki.key)

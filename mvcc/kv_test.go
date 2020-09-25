@@ -242,7 +242,7 @@ func testKVRangeLimit(t *testing.T, f rangeFunc) {
 		if r.Rev != wrev {
 			t.Errorf("#%d: rev = %d, want %d", i, r.Rev, wrev)
 		}
-		if r.Count != len(kvs) {
+		if r.Count != len(r.KVs) {
 			t.Errorf("#%d: count = %d, want %d", i, r.Count, len(kvs))
 		}
 	}
